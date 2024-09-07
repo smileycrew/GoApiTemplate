@@ -3,28 +3,19 @@ package main
 import (
 	"example/GoApiTemplate/handlers"
 	"example/GoApiTemplate/models"
-	"log"
-	"net/http"
-	"os"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
 func main() {
-	handlers.Items = append(handlers.Items, models.Item{ID: 1, Name: "Item 1", Price: 100})
-	handlers.Items = append(handlers.Items, models.Item{ID: 2, Name: "Item 2", Price: 200})
+	models.Items = append(models.Items, models.NewItem("Item 1", 4))
+	models.Items = append(models.Items, models.NewItem("Item 2", 6))
 
-	http.HandleFunc("/items", handlers.GetItems)
-	http.HandleFunc("/items/", handlers.ItemHandler)
+	app := echo.New()
+	app.Use(middleware.Logger())
 
-	port := os.Getenv("PORT")
+	app.GET("/items", handlers.GetItems)
+	app.GET("/items/:id", handlers.GetItem)
 
-	if port == "" {
-		port = "8080"
-		log.Printf("defaulting to port %s", port)
-	}
-
-	log.Printf("listening on port %s", port)
-
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
-		log.Fatal(err)
-	}
+	app.Logger.Fatal(app.Start(":8080"))
 }
