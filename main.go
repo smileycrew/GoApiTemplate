@@ -17,6 +17,7 @@ func main() {
 	app.GET("/items", handlers.GetItems)
 	app.GET("/items/:id", handlers.GetItem)
 	app.POST("/items", handlers.AddItem)
+	app.PUT("/items/:id", handlers.EditItem)
 
 	app.Logger.Fatal(app.Start(":8080"))
 }
