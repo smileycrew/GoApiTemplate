@@ -9,6 +9,22 @@ import (
 
 // Handlers should invoke functions to get the data without accessing the database
 
+func AddItem(context echo.Context) error {
+	item := new(models.Item)
+
+	err := context.Bind(&item)
+
+	if err != nil {
+		return context.JSON(http.StatusBadRequest, "Invalid data.")
+	}
+
+	newItem := models.NewItem(item.Name, item.Price)
+
+	models.Items = append(models.Items, newItem)
+
+	return context.JSON(http.StatusCreated, newItem.ID)
+}
+
 func GetItem(context echo.Context) error {
 	idStr, err := strconv.Atoi(context.Param("id"))
 
@@ -16,7 +32,7 @@ func GetItem(context echo.Context) error {
 		return context.JSON(http.StatusBadRequest, "Invalid request")
 	}
 	for _, item := range models.Items {
-		if item.Id == idStr {
+		if item.ID == idStr {
 			return context.JSON(http.StatusOK, item)
 		}
 	}
