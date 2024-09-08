@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"example/GoApiTemplate/models"
-	"github.com/labstack/echo/v4"
+	"log"
 	"net/http"
 	"strconv"
+
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/labstack/echo/v4"
 )
 
 // Handlers should invoke functions to get the data without accessing the database
@@ -85,18 +89,36 @@ func GetItem(context echo.Context) error {
 	return context.JSON(http.StatusNotFound, "Not found")
 }
 
-func GetItems(context echo.Context) error {
-	items := models.Items
-
-	return context.JSON(http.StatusOK, items)
+type ItemHandler struct {
+	DB *pgxpool.Pool
 }
 
-func ItemHandler(writer http.ResponseWriter, request *http.Request) {
-	// depending on the request method it will route to the correct function
-	switch request.Method {
-	case http.MethodGet:
-		// GetItem(request, writer)
-	default:
-		http.Error(writer, "Method not allowed.", http.StatusMethodNotAllowed)
+func (_itemHandler *ItemHandler) GetItems(c echo.Context) error {
+	rows, err := _itemHandler.DB.Query(context.Background(), "SELECT * FROM Item")
+
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, "Bad gateway?")
 	}
+
+	defer rows.Close()
+
+	var items []models.Item
+
+	for rows.Next() {
+		var item models.Item
+
+		if err := rows.Scan(&item.ID, &item.Name, &item.Price); err != nil {
+			log.Printf("Error scanning row: %v", err)
+			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error."})
+		}
+
+		items = append(items, item)
+	}
+
+	if err := rows.Err(); err != nil {
+		log.Printf("Error iterating over rows: %v", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "Internal server error"})
+	}
+
+	return c.JSON(http.StatusOK, items)
 }
