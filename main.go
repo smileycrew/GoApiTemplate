@@ -3,51 +3,49 @@ package main
 import (
 	"context"
 	"example/GoApiTemplate/handlers"
-	"example/GoApiTemplate/models"
 	"fmt"
-	"os"
-
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"log"
+	"os"
 )
 
 func main() {
-	models.Items = append(models.Items, models.NewItem("Item 1", 4))
-	models.Items = append(models.Items, models.NewItem("Item 2", 6))
+	// load env files
+	if err := godotenv.Load(); err != nil {
+		log.Fatalf("Error loading .env files: %v", err)
+	}
 
+	// initialize echo
 	app := echo.New()
 	app.Use(middleware.Logger())
 
-	err := godotenv.Load()
+	fmt.Println("Environment variables loaded successfully.")
 
-	if err != nil {
-		fmt.Println("Error loading env file.")
-	}
-
-	// connection string needs to be in os.Getenv
 	connStr := os.Getenv("DB_CONNECTION_STRING")
 
-	// connect to the database
+	// creating a new connection pool to the database
 	dbPool, err := pgxpool.New(context.Background(), connStr)
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "Unable to connect to database: %v/n", err)
+		log.Fatalf("Error connecting to the database: %v", err)
+
 		os.Exit(1)
 	}
 
 	defer dbPool.Close()
 
 	// verify the connection
+	if err := dbPool.Ping(context.Background()); err != nil {
+		log.Fatalf("Error connecting to the database: %v", err)
+	}
 
-	conn := &handlers.ItemHandler{DB: dbPool}
+	h := handlers.NewItemHandler(dbPool)
 
-	app.DELETE("/items/:id", handlers.DeleteItem)
-	app.GET("/items", conn.GetItems)
-	app.GET("/items/:id", handlers.GetItem)
-	app.POST("/items", handlers.AddItem)
-	app.PUT("/items/:id", handlers.EditItem)
+	// may need to add the standard get in here
+	app.Any("/items*", h.Controller)
 
 	app.Logger.Fatal(app.Start(":8080"))
 }

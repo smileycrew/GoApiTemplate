@@ -3,17 +3,40 @@ package handlers
 import (
 	"context"
 	"example/GoApiTemplate/models"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/labstack/echo/v4"
 	"log"
 	"net/http"
 	"strconv"
-
-	"github.com/jackc/pgx/v5/pgxpool"
-	"github.com/labstack/echo/v4"
 )
 
 // Handlers should invoke functions to get the data without accessing the database
 
-func AddItem(context echo.Context) error {
+type ItemHandler struct {
+	DB *pgxpool.Pool
+}
+
+func NewItemHandler(db *pgxpool.Pool) *ItemHandler {
+	return &ItemHandler{DB: db}
+}
+
+func (itemHandler *ItemHandler) Controller(cntx echo.Context) error {
+	switch cntx.Request().Method {
+	case http.MethodDelete:
+		itemHandler.deleteItem(cntx)
+	case http.MethodGet:
+		itemHandler.getItems(cntx)
+	case http.MethodPost:
+		return cntx.JSON(http.StatusOK, "POST")
+	case http.MethodPut:
+		return cntx.JSON(http.StatusOK, "PUT")
+		// what error should go here???? defaultl i think
+	}
+
+	return cntx.JSON(http.StatusOK, "NO ROUTE FOUND")
+}
+
+func (itemHandler *ItemHandler) addItem(context echo.Context) error {
 	item := new(models.Item)
 
 	err := context.Bind(&item)
@@ -29,25 +52,25 @@ func AddItem(context echo.Context) error {
 	return context.JSON(http.StatusCreated, newItem.ID)
 }
 
-func DeleteItem(context echo.Context) error {
-	id, err := strconv.Atoi(context.Param("id"))
+func (itemHandler *ItemHandler) deleteItem(cntx echo.Context) error {
+	id, err := strconv.Atoi(cntx.Param("id"))
+
+	log.Print(cntx.Param("id"))
 
 	if err != nil {
-		return context.JSON(http.StatusBadRequest, "Invalid id.")
+		return cntx.JSON(http.StatusBadRequest, "Invalid id.")
 	}
 
-	for index, i := range models.Items {
-		if i.ID == id {
-			models.Items = append(models.Items[:index], models.Items[index+1:]...)
+	rows, err := itemHandler.DB.Query(context.Background(), "DELETE FROM Item WHERE id = ?", id)
 
-			return context.JSON(http.StatusNoContent, i.ID)
-		}
+	if err != nil {
+		return cntx.JSON(http.StatusNotFound, "Item not found.")
 	}
 
-	return context.JSON(http.StatusNotFound, "Item not found.")
+	return cntx.JSON(http.StatusOK, rows)
 }
 
-func EditItem(context echo.Context) error {
+func (itemHandler *ItemHandler) editItem(context echo.Context) error {
 	id, err := strconv.Atoi(context.Param("id"))
 
 	if err != nil {
@@ -89,12 +112,10 @@ func GetItem(context echo.Context) error {
 	return context.JSON(http.StatusNotFound, "Not found")
 }
 
-type ItemHandler struct {
-	DB *pgxpool.Pool
-}
+func (itemHandler *ItemHandler) getItems(c echo.Context) error {
+	// i need a way to get the DB from ItemHandlerStrut here
 
-func (_itemHandler *ItemHandler) GetItems(c echo.Context) error {
-	rows, err := _itemHandler.DB.Query(context.Background(), "SELECT * FROM Item")
+	rows, err := itemHandler.DB.Query(context.Background(), "SELECT * FROM Item")
 
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, "Bad gateway?")
