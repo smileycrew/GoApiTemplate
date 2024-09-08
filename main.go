@@ -14,6 +14,7 @@ func main() {
 	app := echo.New()
 	app.Use(middleware.Logger())
 
+	app.DELETE("/items/:id", handlers.DeleteItem)
 	app.GET("/items", handlers.GetItems)
 	app.GET("/items/:id", handlers.GetItem)
 	app.POST("/items", handlers.AddItem)

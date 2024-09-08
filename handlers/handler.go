@@ -25,6 +25,24 @@ func AddItem(context echo.Context) error {
 	return context.JSON(http.StatusCreated, newItem.ID)
 }
 
+func DeleteItem(context echo.Context) error {
+	id, err := strconv.Atoi(context.Param("id"))
+
+	if err != nil {
+		return context.JSON(http.StatusBadRequest, "Invalid id.")
+	}
+
+	for index, i := range models.Items {
+		if i.ID == id {
+			models.Items = append(models.Items[:index], models.Items[index+1:]...)
+
+			return context.JSON(http.StatusNoContent, i.ID)
+		}
+	}
+
+	return context.JSON(http.StatusNotFound, "Item not found.")
+}
+
 func EditItem(context echo.Context) error {
 	id, err := strconv.Atoi(context.Param("id"))
 
