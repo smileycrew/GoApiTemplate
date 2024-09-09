@@ -18,13 +18,13 @@ func main() {
 		log.Fatalf("Error loading .env files: %v", err)
 	}
 
-	// initialize echo
-	app := echo.New()
-	app.Use(middleware.Logger())
+	connStr := os.Getenv("DB_CONNECTION_STRING")
 
 	fmt.Println("Environment variables loaded successfully.")
 
-	connStr := os.Getenv("DB_CONNECTION_STRING")
+	// initialize echo
+	app := echo.New()
+	app.Use(middleware.Logger())
 
 	// creating a new connection pool to the database
 	dbPool, err := pgxpool.New(context.Background(), connStr)
