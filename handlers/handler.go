@@ -20,48 +20,34 @@ func NewItemHandler(db *pgxpool.Pool) *ItemHandler {
 	return &ItemHandler{DB: db}
 }
 
-func (itemHandler *ItemHandler) Controller(cntx echo.Context) error {
-	switch cntx.Request().Method {
-	case http.MethodDelete:
-		itemHandler.deleteItem(cntx)
-	case http.MethodGet:
-		itemHandler.getItems(cntx)
-	case http.MethodPost:
-		return cntx.JSON(http.StatusOK, "POST")
-	case http.MethodPut:
-		return cntx.JSON(http.StatusOK, "PUT")
-		// what error should go here???? defaultl i think
-	}
-
-	return cntx.JSON(http.StatusOK, "NO ROUTE FOUND")
-}
-
-func (itemHandler *ItemHandler) addItem(context echo.Context) error {
+func (itemHandler *ItemHandler) AddItem(cntx echo.Context) error {
 	item := new(models.Item)
 
-	err := context.Bind(&item)
+	err := cntx.Bind(&item)
 
 	if err != nil {
-		return context.JSON(http.StatusBadRequest, "Invalid data.")
+		return cntx.JSON(http.StatusBadRequest, "Invalid data.")
 	}
 
 	newItem := models.NewItem(item.Name, item.Price)
 
-	models.Items = append(models.Items, newItem)
+	if err := itemHandler.DB.QueryRow(context.Background(), "INSERT INTO Item(name, price) VALUES($1, $2) RETURNING id, name, price", item.Name, item.Price).Scan(&newItem.ID, &newItem.Name, &newItem.Price); err != nil {
+		return cntx.JSON(http.StatusInternalServerError, "Internal server error.")
+	}
 
-	return context.JSON(http.StatusCreated, newItem.ID)
+	return cntx.JSON(http.StatusCreated, newItem)
 }
 
-func (itemHandler *ItemHandler) deleteItem(cntx echo.Context) error {
+func (itemHandler *ItemHandler) DeleteItem(cntx echo.Context) error {
 	id, err := strconv.Atoi(cntx.Param("id"))
 
-	log.Print(cntx.Param("id"))
+	log.Printf("The param id is: %v", id)
 
 	if err != nil {
 		return cntx.JSON(http.StatusBadRequest, "Invalid id.")
 	}
 
-	rows, err := itemHandler.DB.Query(context.Background(), "DELETE FROM Item WHERE id = ?", id)
+	rows, err := itemHandler.DB.Exec(context.Background(), "DELETE FROM Item WHERE id = $1", id)
 
 	if err != nil {
 		return cntx.JSON(http.StatusNotFound, "Item not found.")
@@ -70,51 +56,83 @@ func (itemHandler *ItemHandler) deleteItem(cntx echo.Context) error {
 	return cntx.JSON(http.StatusOK, rows)
 }
 
-func (itemHandler *ItemHandler) editItem(context echo.Context) error {
-	id, err := strconv.Atoi(context.Param("id"))
+func (itemHandler *ItemHandler) EditItem(cntx echo.Context) error {
+	id, err := strconv.Atoi(cntx.Param("id"))
 
 	if err != nil {
-		return context.JSON(http.StatusBadRequest, "Invalid id.")
+		return cntx.JSON(http.StatusBadRequest, "Invalid id.")
 	}
 
 	item := new(models.Item)
 
-	err = context.Bind(&item)
-
-	if err != nil {
-		return context.JSON(http.StatusBadRequest, "Invalid data.")
+	if err := cntx.Bind(&item); err != nil {
+		return cntx.JSON(http.StatusBadRequest, "Invalid data.")
 	}
 
-	for index := range models.Items {
-		if models.Items[index].ID == id {
-			models.Items[index].Name = item.Name
-			models.Items[index].Price = item.Price
+	result, err := itemHandler.DB.Exec(context.Background(), "UPDATE Item SET name = $1, price = $2 WHERE id = $3", item.Name, item.Price, id)
 
-			return context.JSON(http.StatusOK, models.Items[index])
+	if err != nil {
+		return cntx.JSON(http.StatusNotFound, "Item not found.")
+	}
+
+	rowsAffected := result.RowsAffected()
+
+	if rowsAffected == 0 {
+		return cntx.JSON(http.StatusInternalServerError, "Could not update item.")
+	}
+
+	rows, err := itemHandler.DB.Query(context.Background(), "SELECT * FROM Item WHERE id = $1", id)
+
+	if err != nil {
+		return cntx.JSON(http.StatusNotFound, "Item not found after update.")
+	}
+
+	for rows.Next() {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Price); err != nil {
+			log.Printf("Error scanning row: %v", err)
+
+			return cntx.JSON(http.StatusInternalServerError, "Internal server errors.")
 		}
 	}
 
-	return context.JSON(http.StatusNotFound, "Item not found.")
+	return cntx.JSON(http.StatusOK, item)
 }
 
-func GetItem(context echo.Context) error {
-	idStr, err := strconv.Atoi(context.Param("id"))
+func (itemHandler *ItemHandler) GetItem(cntx echo.Context) error {
+	id, err := strconv.Atoi(cntx.Param("id"))
 
 	if err != nil {
-		return context.JSON(http.StatusBadRequest, "Invalid request")
+		return cntx.JSON(http.StatusBadRequest, "Invalid request")
 	}
-	for _, item := range models.Items {
-		if item.ID == idStr {
-			return context.JSON(http.StatusOK, item)
+
+	rows, err := itemHandler.DB.Query(context.Background(), "SELECT * FROM Item WHERE id = $1", id)
+
+	if err != nil {
+		return cntx.JSON(http.StatusNotFound, "Not found")
+	}
+
+	defer rows.Close()
+
+	item := new(models.Item)
+
+	for rows.Next() {
+		if err := rows.Scan(&item.ID, &item.Name, &item.Price); err != nil {
+			log.Printf("Error scanning row: %v:", err)
+
+			return cntx.JSON(http.StatusInternalServerError, "Internal server error.")
 		}
 	}
 
-	return context.JSON(http.StatusNotFound, "Not found")
+	if err := rows.Err(); err != nil {
+		log.Printf("Error iterating over rows: %v", err)
+
+		return cntx.JSON(http.StatusInternalServerError, "Internal server error.")
+	}
+
+	return cntx.JSON(http.StatusOK, item)
 }
 
-func (itemHandler *ItemHandler) getItems(c echo.Context) error {
-	// i need a way to get the DB from ItemHandlerStrut here
-
+func (itemHandler *ItemHandler) GetItems(c echo.Context) error {
 	rows, err := itemHandler.DB.Query(context.Background(), "SELECT * FROM Item")
 
 	if err != nil {

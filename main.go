@@ -42,10 +42,13 @@ func main() {
 		log.Fatalf("Error connecting to the database: %v", err)
 	}
 
-	h := handlers.NewItemHandler(dbPool)
+	itemHandler := handlers.NewItemHandler(dbPool)
 
-	// may need to add the standard get in here
-	app.Any("/items*", h.Controller)
+	app.DELETE("/items/:id", itemHandler.DeleteItem)
+	app.GET("/items", itemHandler.GetItems)
+	app.GET("/items/:id", itemHandler.GetItem)
+	app.POST("/items", itemHandler.AddItem)
+	app.PUT("/items/:id", itemHandler.EditItem)
 
 	app.Logger.Fatal(app.Start(":8080"))
 }
